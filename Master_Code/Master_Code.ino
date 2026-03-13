@@ -1,5 +1,8 @@
-#include <Servo.h>
-#include <SoftwareSerial.h>
+#include <Adafruit_NeoPixel.h> // For controlling the smart LED
+#include <Wire.h> // For I2C communication (used by some sensors)
+#include <ESP32Servo.h>
+
+
 
 /*
   MASTER BOARD
@@ -46,10 +49,9 @@ const int L_MOTOR_B_ENC2 = 25;
 // =========================
 // COMMUNICATION TO SLAVE
 // =========================
-const int COMM_RX_UNUSED = 6;   // not used, but SoftwareSerial needs a pin
-const int COMM_TX_TO_SLAVE = 7; // connect to slave RX
-SoftwareSerial slaveSerial(COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
-
+const int COMM_RX_UNUSED = 16;   // RX pin on master
+const int COMM_TX_TO_SLAVE = 17; // TX pin on master
+HardwareSerial slaveSerial(2);
 // =========================
 // SERVO
 // =========================
@@ -113,7 +115,7 @@ void resolveStage2(char oppLeft, char oppRight);
 
 void setup() {
   Serial.begin(9600);
-  slaveSerial.begin(9600);
+  slaveSerial.begin(9600, SERIAL_8N1, COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
   randomSeed(analogRead(A0));
 
   // Motor driver pins
