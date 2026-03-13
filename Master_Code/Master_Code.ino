@@ -21,9 +21,27 @@
 // =========================
 // MASTER LOCAL HARDWARE
 // =========================
-const int L_MOTOR_A = 2;   // thumb + ring + pinky
-const int L_MOTOR_B = 3;   // index + middle
-const int LEFT_COVER_SERVO_PIN = 9;
+
+// Motor A = thumb + ring + pinky
+const int L_MOTOR_A_IN1 = 26;
+const int L_MOTOR_A_IN2 = 16;
+
+// Motor B = index + middle
+const int L_MOTOR_B_IN1 = 27;
+const int L_MOTOR_B_IN2 = 17;
+
+// Cover servo
+const int LEFT_COVER_SERVO_PIN = 17;
+
+// =========================
+// OPTIONAL ENCODER PINS
+// =========================
+// These are not used yet in the code below.
+// They are here so you can set them now for future use.
+const int L_MOTOR_A_ENC1 = 35;
+const int L_MOTOR_A_ENC2 = 32;
+const int L_MOTOR_B_ENC1 = 33;
+const int L_MOTOR_B_ENC2 = 25;
 
 // =========================
 // COMMUNICATION TO SLAVE
@@ -72,7 +90,10 @@ void sendCommandToSlave(char cmd);
 
 void showGestureLeft(char gesture);
 void releaseLeftHand();
-void pullMotor(int pin, unsigned long durationMs);
+
+void stopMotor(int in1, int in2);
+void pullMotorForward(int in1, int in2, unsigned long durationMs);
+void pullMotorReverse(int in1, int in2, unsigned long durationMs);
 
 void uncoverLeftHand();
 void coverLeftHand();
@@ -95,11 +116,20 @@ void setup() {
   slaveSerial.begin(9600);
   randomSeed(analogRead(A0));
 
-  pinMode(L_MOTOR_A, OUTPUT);
-  pinMode(L_MOTOR_B, OUTPUT);
+  // Motor driver pins
+  pinMode(L_MOTOR_A_IN1, OUTPUT);
+  pinMode(L_MOTOR_A_IN2, OUTPUT);
+  pinMode(L_MOTOR_B_IN1, OUTPUT);
+  pinMode(L_MOTOR_B_IN2, OUTPUT);
 
-  digitalWrite(L_MOTOR_A, LOW);
-  digitalWrite(L_MOTOR_B, LOW);
+  stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+  stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+
+  // Optional encoder pins
+  pinMode(L_MOTOR_A_ENC1, INPUT);
+  pinMode(L_MOTOR_A_ENC2, INPUT);
+  pinMode(L_MOTOR_B_ENC1, INPUT);
+  pinMode(L_MOTOR_B_ENC2, INPUT);
 
   leftCoverServo.attach(LEFT_COVER_SERVO_PIN);
 
@@ -244,24 +274,41 @@ void showGestureLeft(char gesture) {
     return;
   }
   else if (gesture == ROCK) {
-    pullMotor(L_MOTOR_A, PULL_TIME_ROCK_MS);
-    pullMotor(L_MOTOR_B, PULL_TIME_ROCK_MS);
+    // Pull both motor groups
+    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS);
+    pullMotorForward(L_MOTOR_B_IN1, L_MOTOR_B_IN2, PULL_TIME_ROCK_MS);
   }
   else if (gesture == SCISSORS) {
-    // close thumb/ring/pinky, leave index/middle open
-    pullMotor(L_MOTOR_A, PULL_TIME_SCISSORS_MS);
+    // Close thumb/ring/pinky, leave index/middle open
+    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_SCISSORS_MS);
   }
 }
 
 void releaseLeftHand() {
-  digitalWrite(L_MOTOR_A, LOW);
-  digitalWrite(L_MOTOR_B, LOW);
+  stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+  stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
 }
 
-void pullMotor(int pin, unsigned long durationMs) {
-  digitalWrite(pin, HIGH);
+// =========================
+// MOTOR DRIVER CONTROL
+// =========================
+void stopMotor(int in1, int in2) {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+}
+
+void pullMotorForward(int in1, int in2, unsigned long durationMs) {
+  digitalWrite(in1, HIGH);
+  digitalWrite(in2, LOW);
   delay(durationMs);
-  digitalWrite(pin, LOW);
+  stopMotor(in1, in2);
+}
+
+void pullMotorReverse(int in1, int in2, unsigned long durationMs) {
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, HIGH);
+  delay(durationMs);
+  stopMotor(in1, in2);
 }
 
 // =========================
