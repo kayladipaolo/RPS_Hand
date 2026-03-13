@@ -114,8 +114,8 @@ void runNewRound();
 void resolveStage2(char oppLeft, char oppRight);
 
 void setup() {
-  Serial.begin(9600);
-  slaveSerial.begin(9600, SERIAL_8N1, COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
+  Serial.begin(115200);
+  slaveSerial.begin(115200, SERIAL_8N1, COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
   randomSeed(analogRead(A0));
 
   // Motor driver pins
@@ -277,12 +277,12 @@ void showGestureLeft(char gesture) {
   }
   else if (gesture == ROCK) {
     // Pull both motor groups
-    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS);
-    pullMotorForward(L_MOTOR_B_IN1, L_MOTOR_B_IN2, PULL_TIME_ROCK_MS);
+    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS, "Motor A");
+    pullMotorForward(L_MOTOR_B_IN1, L_MOTOR_B_IN2, PULL_TIME_ROCK_MS, "Motor B");
   }
   else if (gesture == SCISSORS) {
     // Close thumb/ring/pinky, leave index/middle open
-    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_SCISSORS_MS);
+    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS, "Motor A");
   }
 }
 
@@ -299,11 +299,22 @@ void stopMotor(int in1, int in2) {
   digitalWrite(in2, LOW);
 }
 
-void pullMotorForward(int in1, int in2, unsigned long durationMs) {
+void pullMotorForward(int in1, int in2, unsigned long durationMs, const char* name) {
+  Serial.print(name);
+  Serial.println(" START");
+
   digitalWrite(in1, HIGH);
   digitalWrite(in2, LOW);
+
   delay(durationMs);
+
+  Serial.print(name);
+  Serial.println(" STOP");
+
   stopMotor(in1, in2);
+
+  Serial.print(name);
+  Serial.println(" STOP COMMAND SENT");
 }
 
 void pullMotorReverse(int in1, int in2, unsigned long durationMs) {
