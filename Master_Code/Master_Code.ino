@@ -276,7 +276,6 @@ void resolveStage2(char oppLeft, char oppRight) {
 // LEFT HAND CONTROL
 // =========================
 void showGestureLeft(char gesture) {
-  releaseLeftHand();
   delay(100);
 
   if (gesture == PAPER) {

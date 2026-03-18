@@ -11,9 +11,14 @@ const int R_MOTOR_A_IN2 = 16;  // CHANGE if 16 is being used for UART RX on your
 const int R_MOTOR_B_IN1 = 27;
 const int R_MOTOR_B_IN2 = 17;
 
+const int L_MOTOR_A_ENC1 = 35;
+const int L_MOTOR_A_ENC2 = 32;
+const int L_MOTOR_B_ENC1 = 33;
+const int L_MOTOR_B_ENC2 = 25;
+
 // UART from master
-const int SLAVE_RX_FROM_MASTER = 16;   // If using 16 for RX, DO NOT also use it for motor pin
-const int SLAVE_TX_UNUSED      = 4;
+const int SLAVE_RX_FROM_MASTER = 18;
+const int SLAVE_TX_UNUSED      = 19;
 
 HardwareSerial masterSerial(2);
 
@@ -28,7 +33,7 @@ void setup() {
 
   stopAll();
 
-  Serial.println("=== SLAVE TEST READY ===");
+  Serial.println("=== SLAVE MOTOR TEST READY ===");
   Serial.println("Waiting for master commands...");
 }
 
@@ -70,10 +75,10 @@ void loop() {
   }
 }
 
-// =========================
+// =====================================
 // MOTOR FUNCTIONS
-// Use the same directions that worked in your motor test
-// =========================
+// These match your working standalone motor test
+// =====================================
 void motorAForward() {
   digitalWrite(R_MOTOR_A_IN1, LOW);
   digitalWrite(R_MOTOR_A_IN2, HIGH);

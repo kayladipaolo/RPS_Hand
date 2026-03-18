@@ -31,36 +31,24 @@ void setup() {
 }
 
 void loop() {
-  // -----------------------
-  // Test Motor A Forward
-  // -----------------------
   Serial.println("Motor A forward");
   motorAForward();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_A_IN1, MOTOR_A_IN2);
   delay(STOP_TIME_MS);
 
-  // -----------------------
-  // Test Motor A Reverse
-  // -----------------------
   Serial.println("Motor A reverse");
   motorAReverse();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_A_IN1, MOTOR_A_IN2);
   delay(STOP_TIME_MS);
 
-  // -----------------------
-  // Test Motor B Forward
-  // -----------------------
   Serial.println("Motor B forward");
   motorBForward();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_B_IN1, MOTOR_B_IN2);
   delay(STOP_TIME_MS);
 
-  // -----------------------
-  // Test Motor B Reverse
-  // -----------------------
   Serial.println("Motor B reverse");
   motorBReverse();
   delay(RUN_TIME_MS);
@@ -75,7 +63,7 @@ void loop() {
 // MOTOR A FUNCTIONS
 // =====================================
 void motorAForward() {
-  // swapped because A was going backwards before
+  // swapped because A was backwards
   digitalWrite(MOTOR_A_IN1, LOW);
   digitalWrite(MOTOR_A_IN2, HIGH);
 }
