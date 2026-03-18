@@ -34,7 +34,7 @@ const int L_MOTOR_B_IN1 = 27;
 const int L_MOTOR_B_IN2 = 17;
 
 // Cover servo
-const int LEFT_COVER_SERVO_PIN = 17;
+const int LEFT_COVER_SERVO_PIN = 4;
 
 // =========================
 // OPTIONAL ENCODER PINS
@@ -49,8 +49,8 @@ const int L_MOTOR_B_ENC2 = 25;
 // =========================
 // COMMUNICATION TO SLAVE
 // =========================
-const int COMM_RX_UNUSED = 16;   // RX pin on master
-const int COMM_TX_TO_SLAVE = 17; // TX pin on master
+const int COMM_RX_UNUSED = 21;   // RX pin on master
+const int COMM_TX_TO_SLAVE = 22; // TX pin on master
 HardwareSerial slaveSerial(2);
 // =========================
 // SERVO
@@ -66,11 +66,14 @@ const int LEFT_COVER_CLOSED_ANGLE = 90;
 // =========================
 // MOTOR TIMINGS - TUNE THESE
 // =========================
-const unsigned long PULL_TIME_ROCK_MS     = 600;
-const unsigned long PULL_TIME_SCISSORS_MS = 500;
+const unsigned long PULL_TIME_ROCK_MS     = 5000;
+const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 const unsigned long RESET_WAIT_MS         = 700;
 const unsigned long COVER_WAIT_MS         = 500;
 
+
+const unsigned long RESET_TIME_MOTOR_A_MS = 450;
+const unsigned long RESET_TIME_MOTOR_B_MS = 450;
 // =========================
 // GESTURES
 // =========================
@@ -84,7 +87,7 @@ const char SCISSORS = 'S';
 char myLeftGesture  = PAPER;
 char myRightGesture = PAPER;
 bool roundActive = false;
-
+int lastChoice = -1;
 // =========================
 // FUNCTION DECLARATIONS
 // =========================
@@ -93,9 +96,13 @@ void sendCommandToSlave(char cmd);
 void showGestureLeft(char gesture);
 void releaseLeftHand();
 
+void motorAForward();
+void motorAReverse();
+void motorBForward();
+void motorBReverse();
+
 void stopMotor(int in1, int in2);
-void pullMotorForward(int in1, int in2, unsigned long durationMs);
-void pullMotorReverse(int in1, int in2, unsigned long durationMs);
+void stopLeftHand();
 
 void uncoverLeftHand();
 void coverLeftHand();
@@ -116,7 +123,7 @@ void resolveStage2(char oppLeft, char oppRight);
 void setup() {
   Serial.begin(115200);
   slaveSerial.begin(115200, SERIAL_8N1, COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
-  randomSeed(analogRead(A0));
+  randomSeed(esp_random());
 
   // Motor driver pins
   pinMode(L_MOTOR_A_IN1, OUTPUT);
@@ -273,55 +280,72 @@ void showGestureLeft(char gesture) {
   delay(100);
 
   if (gesture == PAPER) {
+    Serial.println("Showing PAPER");
     return;
   }
   else if (gesture == ROCK) {
-    // Pull both motor groups
-    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS, "Motor A");
-    pullMotorForward(L_MOTOR_B_IN1, L_MOTOR_B_IN2, PULL_TIME_ROCK_MS, "Motor B");
+    Serial.println("Showing ROCK");
+
+    motorAForward();
+    motorBForward();
+
+    delay(PULL_TIME_ROCK_MS);
+    stopLeftHand();
   }
   else if (gesture == SCISSORS) {
-    // Close thumb/ring/pinky, leave index/middle open
-    pullMotorForward(L_MOTOR_A_IN1, L_MOTOR_A_IN2, PULL_TIME_ROCK_MS, "Motor A");
+    Serial.println("Showing SCISSORS");
+
+    motorAForward();
+    stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+
+    delay(PULL_TIME_SCISSORS_MS);
+    stopLeftHand();
   }
 }
 
 void releaseLeftHand() {
-  stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
-  stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+  Serial.println("Resetting left hand to PAPER...");
+
+  motorAReverse();
+  motorBReverse();
+
+  delay(5000);   // tune this value
+
+  stopLeftHand();
+  delay(150);
 }
 
 // =========================
 // MOTOR DRIVER CONTROL
 // =========================
+void motorAForward() {
+  digitalWrite(L_MOTOR_A_IN1, LOW);
+  digitalWrite(L_MOTOR_A_IN2, HIGH);
+}
+
+void motorAReverse() {
+  digitalWrite(L_MOTOR_A_IN1, HIGH);
+  digitalWrite(L_MOTOR_A_IN2, LOW);
+}
+
+void motorBForward() {
+  digitalWrite(L_MOTOR_B_IN1, HIGH);
+  digitalWrite(L_MOTOR_B_IN2, LOW);
+}
+
+void motorBReverse() {
+  digitalWrite(L_MOTOR_B_IN1, LOW);
+  digitalWrite(L_MOTOR_B_IN2, HIGH);
+}
+
 void stopMotor(int in1, int in2) {
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
 }
 
-void pullMotorForward(int in1, int in2, unsigned long durationMs, const char* name) {
-  Serial.print(name);
-  Serial.println(" START");
-
-  digitalWrite(in1, HIGH);
-  digitalWrite(in2, LOW);
-
-  delay(durationMs);
-
-  Serial.print(name);
-  Serial.println(" STOP");
-
-  stopMotor(in1, in2);
-
-  Serial.print(name);
-  Serial.println(" STOP COMMAND SENT");
-}
-
-void pullMotorReverse(int in1, int in2, unsigned long durationMs) {
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, HIGH);
-  delay(durationMs);
-  stopMotor(in1, in2);
+void stopLeftHand() {
+  stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+  stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
 }
 
 // =========================
@@ -376,7 +400,13 @@ char getOtherHand(char pairA, char pairB, char oneOfThem) {
 }
 
 void chooseStage1Pair(char &leftG, char &rightG) {
-  int choice = random(0, 3);
+  int choice;
+
+  do {
+    choice = random(0, 3);
+  } while (choice == lastChoice);
+
+  lastChoice = choice;
 
   switch (choice) {
     case 0:
