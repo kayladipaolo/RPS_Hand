@@ -13,8 +13,8 @@ const int MOTOR_B_IN1 = 27;
 const int MOTOR_B_IN2 = 17;
 
 // -------- TIMING --------
-const unsigned long RUN_TIME_MS  = 2000;  // how long each motor runs
-const unsigned long STOP_TIME_MS = 1000;  // pause between tests
+const unsigned long RUN_TIME_MS  = 2000;
+const unsigned long STOP_TIME_MS = 1000;
 
 void setup() {
   Serial.begin(115200);
@@ -35,7 +35,7 @@ void loop() {
   // Test Motor A Forward
   // -----------------------
   Serial.println("Motor A forward");
-  motorForward(MOTOR_A_IN1, MOTOR_A_IN2);
+  motorAForward();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_A_IN1, MOTOR_A_IN2);
   delay(STOP_TIME_MS);
@@ -44,7 +44,7 @@ void loop() {
   // Test Motor A Reverse
   // -----------------------
   Serial.println("Motor A reverse");
-  motorReverse(MOTOR_A_IN1, MOTOR_A_IN2);
+  motorAReverse();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_A_IN1, MOTOR_A_IN2);
   delay(STOP_TIME_MS);
@@ -53,7 +53,7 @@ void loop() {
   // Test Motor B Forward
   // -----------------------
   Serial.println("Motor B forward");
-  motorForward(MOTOR_B_IN1, MOTOR_B_IN2);
+  motorBForward();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_B_IN1, MOTOR_B_IN2);
   delay(STOP_TIME_MS);
@@ -62,7 +62,7 @@ void loop() {
   // Test Motor B Reverse
   // -----------------------
   Serial.println("Motor B reverse");
-  motorReverse(MOTOR_B_IN1, MOTOR_B_IN2);
+  motorBReverse();
   delay(RUN_TIME_MS);
   stopMotor(MOTOR_B_IN1, MOTOR_B_IN2);
   delay(STOP_TIME_MS);
@@ -72,18 +72,35 @@ void loop() {
 }
 
 // =====================================
-// MOTOR FUNCTIONS
+// MOTOR A FUNCTIONS
 // =====================================
-void motorForward(int in1, int in2) {
-  digitalWrite(in1, HIGH);
-  digitalWrite(in2, LOW);
+void motorAForward() {
+  // swapped because A was going backwards before
+  digitalWrite(MOTOR_A_IN1, LOW);
+  digitalWrite(MOTOR_A_IN2, HIGH);
 }
 
-void motorReverse(int in1, int in2) {
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, HIGH);
+void motorAReverse() {
+  digitalWrite(MOTOR_A_IN1, HIGH);
+  digitalWrite(MOTOR_A_IN2, LOW);
 }
 
+// =====================================
+// MOTOR B FUNCTIONS
+// =====================================
+void motorBForward() {
+  digitalWrite(MOTOR_B_IN1, HIGH);
+  digitalWrite(MOTOR_B_IN2, LOW);
+}
+
+void motorBReverse() {
+  digitalWrite(MOTOR_B_IN1, LOW);
+  digitalWrite(MOTOR_B_IN2, HIGH);
+}
+
+// =====================================
+// STOP FUNCTION
+// =====================================
 void stopMotor(int in1, int in2) {
   digitalWrite(in1, LOW);
   digitalWrite(in2, LOW);
