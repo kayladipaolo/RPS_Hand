@@ -1,10 +1,18 @@
-#include <Adafruit_NeoPixel.h> // For controlling the smart LED
-#include <Wire.h> // For I2C communication (used by some sensors)
+#include <WiFi.h>
+#include <esp_now.h>
 #include <ESP32Servo.h>
 
-// =========================
+/*
+  CLEAN SLAVE BOARD
+  -----------------
+  - Controls RIGHT hand only
+  - Receives commands from master via ESP-NOW
+  - No game logic on this board
+*/
+
+// =====================================================
 // RIGHT HAND HARDWARE
-// =========================
+// =====================================================
 
 // Motor A = thumb + ring + pinky
 const int R_MOTOR_A_IN1 = 26;
@@ -17,59 +25,89 @@ const int R_MOTOR_B_IN2 = 17;
 // Cover servo
 const int RIGHT_COVER_SERVO_PIN = 4;
 
-// =========================
-// UART FROM MASTER
-// =========================
-const int SLAVE_RX_FROM_MASTER = 16;   // change if needed
-const int SLAVE_TX_UNUSED      = 18;   // change if needed
-HardwareSerial masterSerial(2);
-
-// =========================
+// =====================================================
 // SERVO
-// =========================
+// =====================================================
 Servo rightCoverServo;
 
-// =========================
-// SERVO ANGLES
-// =========================
-const int RIGHT_COVER_OPEN_ANGLE   = 0;
-const int RIGHT_COVER_CLOSED_ANGLE = 90;
+// =====================================================
+// TUNING
+// =====================================================
+const int RIGHT_COVER_OPEN_ANGLE   = 90;
+const int RIGHT_COVER_CLOSED_ANGLE = 0;
 
-// =========================
-// TIMINGS
-// =========================
 const unsigned long PULL_TIME_ROCK_MS     = 5000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 const unsigned long RESET_TIME_MS         = 5000;
 const unsigned long COVER_WAIT_MS         = 500;
 
-// =========================
-// GESTURES
-// =========================
+// =====================================================
+// GAME SYMBOLS
+// =====================================================
 const char ROCK     = 'R';
 const char PAPER    = 'P';
 const char SCISSORS = 'S';
 
-// =========================
+// =====================================================
+// COMMAND PROTOCOL
+// =====================================================
+enum CommandType : uint8_t {
+  CMD_NONE = 0,
+  CMD_SET_GESTURE = 1,
+  CMD_SET_COVER   = 2,
+  CMD_RESET_HAND  = 3
+};
+
+enum CoverState : uint8_t {
+  COVER_UNCHANGED = 0,
+  COVER_OPEN      = 1,
+  COVER_CLOSED    = 2
+};
+
+struct RightHandPacket {
+  uint32_t seq;
+  uint8_t command;
+  uint8_t gesture;
+  uint8_t cover;
+};
+
+// =====================================================
+// STATE
+// =====================================================
+char rightCurrentGesture = PAPER;
+bool rightCovered = false;
+
+volatile bool packetPending = false;
+volatile uint32_t newestSeqSeen = 0;
+
+RightHandPacket pendingPacket;
+uint32_t lastProcessedSeq = 0;
+
+// =====================================================
 // FUNCTION DECLARATIONS
-// =========================
-void showGestureRight(char gesture);
-void releaseRightHand();
+// =====================================================
+bool initEspNow();
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+
+void executePacket(const RightHandPacket &pkt);
+
+void setRightGesture(char gesture);
+void resetRightHandToPaper();
+void setRightCover(bool covered);
 
 void motorAForward();
 void motorAReverse();
 void motorBForward();
 void motorBReverse();
-
 void stopMotor(int in1, int in2);
 void stopRightHand();
 
-void uncoverRightHand();
-void coverRightHand();
-
+// =====================================================
+// SETUP
+// =====================================================
 void setup() {
   Serial.begin(115200);
-  masterSerial.begin(115200, SERIAL_8N1, SLAVE_RX_FROM_MASTER, SLAVE_TX_UNUSED);
+  delay(500);
 
   pinMode(R_MOTOR_A_IN1, OUTPUT);
   pinMode(R_MOTOR_A_IN2, OUTPUT);
@@ -80,84 +118,156 @@ void setup() {
 
   rightCoverServo.attach(RIGHT_COVER_SERVO_PIN);
 
-  uncoverRightHand();
-  releaseRightHand();
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  Serial.println();
+  Serial.println("=== SLAVE BOOT ===");
+  Serial.print("Slave MAC: ");
+  Serial.println(WiFi.macAddress());
+
+  if (!initEspNow()) {
+    Serial.println("ESP-NOW init failed.");
+    while (true) delay(1000);
+  }
+
+  // Safe startup
+  setRightCover(false);
+  resetRightHandToPaper();
 
   Serial.println("=== SLAVE READY ===");
 }
 
+// =====================================================
+// LOOP
+// =====================================================
 void loop() {
-  if (masterSerial.available()) {
-    char cmd = masterSerial.read();
+  if (packetPending) {
+    noInterrupts();
+    RightHandPacket pkt = pendingPacket;
+    packetPending = false;
+    interrupts();
 
-    Serial.print("Received command: ");
-    Serial.println(cmd);
-
-    if (cmd == 'P') {
-      showGestureRight(PAPER);
-    }
-    else if (cmd == 'R') {
-      showGestureRight(ROCK);
-    }
-    else if (cmd == 'S') {
-      showGestureRight(SCISSORS);
-    }
-    else if (cmd == 'C') {
-      coverRightHand();
-    }
-    else if (cmd == 'U') {
-      uncoverRightHand();
+    if (pkt.seq > lastProcessedSeq) {
+      executePacket(pkt);
+      lastProcessedSeq = pkt.seq;
     }
   }
 }
 
-// =========================
+// =====================================================
+// ESP-NOW
+// =====================================================
+bool initEspNow() {
+  if (esp_now_init() != ESP_OK) {
+    return false;
+  }
+
+  esp_now_register_recv_cb(onDataRecv);
+  return true;
+}
+
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  if (len != sizeof(RightHandPacket)) return;
+
+  RightHandPacket pkt;
+  memcpy(&pkt, data, sizeof(pkt));
+
+  // Keep only newest packet
+  if (pkt.seq >= newestSeqSeen) {
+    newestSeqSeen = pkt.seq;
+    pendingPacket = pkt;
+    packetPending = true;
+  }
+}
+
+// =====================================================
+// PACKET EXECUTION
+// =====================================================
+void executePacket(const RightHandPacket &pkt) {
+  Serial.print("RX seq=");
+  Serial.print(pkt.seq);
+  Serial.print(" cmd=");
+  Serial.print(pkt.command);
+  Serial.print(" gesture=");
+  Serial.print((char)pkt.gesture);
+  Serial.print(" cover=");
+  Serial.println(pkt.cover);
+
+  switch (pkt.command) {
+    case CMD_SET_GESTURE:
+      setRightGesture((char)pkt.gesture);
+      break;
+
+    case CMD_SET_COVER:
+      if (pkt.cover == COVER_OPEN) {
+        setRightCover(false);
+      } else if (pkt.cover == COVER_CLOSED) {
+        setRightCover(true);
+      }
+      break;
+
+    case CMD_RESET_HAND:
+      resetRightHandToPaper();
+      break;
+
+    default:
+      break;
+  }
+}
+
+// =====================================================
 // RIGHT HAND CONTROL
-// =========================
-void showGestureRight(char gesture) {
+// =====================================================
+void setRightGesture(char gesture) {
+  if (gesture != ROCK && gesture != PAPER && gesture != SCISSORS) return;
+
+  Serial.print("RIGHT -> ");
+  Serial.println(gesture);
+
   if (gesture == PAPER) {
-    Serial.println("Showing PAPER");
-    releaseRightHand();
+    Serial.println("RIGHT already in PAPER / no motor move");
+    stopRightHand();
     return;
   }
   else if (gesture == ROCK) {
-    Serial.println("Showing ROCK");
-
     motorAForward();
     motorBForward();
-
     delay(PULL_TIME_ROCK_MS);
     stopRightHand();
   }
   else if (gesture == SCISSORS) {
-    Serial.println("Showing SCISSORS");
-
-    releaseRightHand();
-    delay(100);
-
     motorAForward();
-
+    stopMotor(R_MOTOR_B_IN1, R_MOTOR_B_IN2);
     delay(PULL_TIME_SCISSORS_MS);
     stopRightHand();
   }
 }
 
-void releaseRightHand() {
-  Serial.println("Resetting right hand to PAPER...");
-
+void resetRightHandToPaper() {
+  Serial.println("RIGHT -> reset to PAPER");
   motorAReverse();
   motorBReverse();
-
   delay(RESET_TIME_MS);
-
   stopRightHand();
   delay(150);
+  rightCurrentGesture = PAPER;
 }
 
-// =========================
-// MOTOR DRIVER CONTROL
-// =========================
-// These directions may need to be changed to match the actual wiring
+void setRightCover(bool covered) {
+  if (covered) {
+    Serial.println("RIGHT COVER -> CLOSE");
+    rightCoverServo.write(RIGHT_COVER_CLOSED_ANGLE);
+  } else {
+    Serial.println("RIGHT COVER -> OPEN");
+    rightCoverServo.write(RIGHT_COVER_OPEN_ANGLE);
+  }
+  delay(COVER_WAIT_MS);
+}
+
+// =====================================================
+// MOTOR CONTROL
+// =====================================================
 void motorAForward() {
   digitalWrite(R_MOTOR_A_IN1, LOW);
   digitalWrite(R_MOTOR_A_IN2, HIGH);
@@ -186,17 +296,4 @@ void stopMotor(int in1, int in2) {
 void stopRightHand() {
   stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
   stopMotor(R_MOTOR_B_IN1, R_MOTOR_B_IN2);
-}
-
-// =========================
-// RIGHT COVER CONTROL
-// =========================
-void uncoverRightHand() {
-  rightCoverServo.write(RIGHT_COVER_OPEN_ANGLE);
-  delay(COVER_WAIT_MS);
-}
-
-void coverRightHand() {
-  rightCoverServo.write(RIGHT_COVER_CLOSED_ANGLE);
-  delay(COVER_WAIT_MS);
 }
