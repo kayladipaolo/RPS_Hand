@@ -1,42 +1,65 @@
-// =====================================
-// MASTER UART TEST
-// Type commands in Serial Monitor:
-//   a = slave motor A forward
-//   z = slave motor A reverse
-//   s = slave motor B forward
-//   x = slave motor B reverse
-//   p = stop both motors
-// =====================================
+#include <WiFi.h>
+#include <esp_now.h>
 
-const int COMM_RX_UNUSED   = 21;
-const int COMM_TX_TO_SLAVE = 22;
+uint8_t slaveAddress[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};
 
-HardwareSerial slaveSerial(2);
+// New callback signature for newer ESP32 core versions
+void onSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+  Serial.print("Send status: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
 
 void setup() {
   Serial.begin(115200);
-  slaveSerial.begin(115200, SERIAL_8N1, COMM_RX_UNUSED, COMM_TX_TO_SLAVE);
+  delay(1000);
 
-  Serial.println("=== MASTER TEST READY ===");
-  Serial.println("Type:");
-  Serial.println("  a = Motor A forward");
-  Serial.println("  z = Motor A reverse");
-  Serial.println("  s = Motor B forward");
-  Serial.println("  x = Motor B reverse");
-  Serial.println("  p = Stop both");
-  Serial.println();
+  WiFi.mode(WIFI_STA);
+
+  Serial.print("Master MAC: ");
+  Serial.println(WiFi.macAddress());
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  if (esp_now_register_send_cb(onSent) != ESP_OK) {
+    Serial.println("Failed to register send callback");
+    return;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, slaveAddress, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+
+  Serial.println("MASTER READY");
+  Serial.println("a = Motor A forward");
+  Serial.println("z = Motor A reverse");
+  Serial.println("s = Motor B forward");
+  Serial.println("x = Motor B reverse");
+  Serial.println("p = stop all");
 }
 
 void loop() {
-  if (Serial.available()) {
+  if (Serial.available() > 0) {
     char cmd = Serial.read();
 
     if (cmd == '\n' || cmd == '\r') return;
 
-    Serial.print("Sending command: ");
+    Serial.print("Sending: ");
     Serial.println(cmd);
 
-    slaveSerial.write(cmd);
-    delay(20);
+    esp_err_t result = esp_now_send(slaveAddress, (uint8_t *)&cmd, sizeof(cmd));
+
+    if (result != ESP_OK) {
+      Serial.print("Send error: ");
+      Serial.println(result);
+    }
   }
 }

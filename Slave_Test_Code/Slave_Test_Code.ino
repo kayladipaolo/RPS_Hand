@@ -1,110 +1,67 @@
-// =====================================
-// SLAVE UART + MOTOR TEST
-// Receives commands from master and moves motors
-// =====================================
+#include <WiFi.h>
+#include <esp_now.h>
 
-// Motor A
-const int R_MOTOR_A_IN1 = 26;
-const int R_MOTOR_A_IN2 = 16;  // CHANGE if 16 is being used for UART RX on your setup
+const int P26 = 26;   // Motor A reverse
+const int P16 = 16;   // Motor B reverse
+const int P27 = 27;   // Motor A forward
+const int P17 = 17;   // Motor B forward
 
-// Motor B
-const int R_MOTOR_B_IN1 = 27;
-const int R_MOTOR_B_IN2 = 17;
-
-const int L_MOTOR_A_ENC1 = 35;
-const int L_MOTOR_A_ENC2 = 32;
-const int L_MOTOR_B_ENC1 = 33;
-const int L_MOTOR_B_ENC2 = 25;
-
-// UART from master
-const int SLAVE_RX_FROM_MASTER = 18;
-const int SLAVE_TX_UNUSED      = 19;
-
-HardwareSerial masterSerial(2);
-
-void setup() {
-  Serial.begin(115200);
-  masterSerial.begin(115200, SERIAL_8N1, SLAVE_RX_FROM_MASTER, SLAVE_TX_UNUSED);
-
-  pinMode(R_MOTOR_A_IN1, OUTPUT);
-  pinMode(R_MOTOR_A_IN2, OUTPUT);
-  pinMode(R_MOTOR_B_IN1, OUTPUT);
-  pinMode(R_MOTOR_B_IN2, OUTPUT);
-
-  stopAll();
-
-  Serial.println("=== SLAVE MOTOR TEST READY ===");
-  Serial.println("Waiting for master commands...");
-}
-
-void loop() {
-  if (masterSerial.available()) {
-    char cmd = masterSerial.read();
-
-    Serial.print("Received: ");
-    Serial.println(cmd);
-
-    if (cmd == 'a') {
-      Serial.println("Motor A forward");
-      motorAForward();
-      delay(1000);
-      stopAll();
-    }
-    else if (cmd == 'z') {
-      Serial.println("Motor A reverse");
-      motorAReverse();
-      delay(1000);
-      stopAll();
-    }
-    else if (cmd == 's') {
-      Serial.println("Motor B forward");
-      motorBForward();
-      delay(1000);
-      stopAll();
-    }
-    else if (cmd == 'x') {
-      Serial.println("Motor B reverse");
-      motorBReverse();
-      delay(1000);
-      stopAll();
-    }
-    else if (cmd == 'p') {
-      Serial.println("Stopping all motors");
-      stopAll();
-    }
-  }
-}
-
-// =====================================
-// MOTOR FUNCTIONS
-// These match your working standalone motor test
-// =====================================
-void motorAForward() {
-  digitalWrite(R_MOTOR_A_IN1, LOW);
-  digitalWrite(R_MOTOR_A_IN2, HIGH);
-}
-
-void motorAReverse() {
-  digitalWrite(R_MOTOR_A_IN1, HIGH);
-  digitalWrite(R_MOTOR_A_IN2, LOW);
-}
-
-void motorBForward() {
-  digitalWrite(R_MOTOR_B_IN1, HIGH);
-  digitalWrite(R_MOTOR_B_IN2, LOW);
-}
-
-void motorBReverse() {
-  digitalWrite(R_MOTOR_B_IN1, LOW);
-  digitalWrite(R_MOTOR_B_IN2, HIGH);
-}
-
-void stopMotor(int in1, int in2) {
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, LOW);
+void setPins(int s26, int s16, int s27, int s17) {
+  digitalWrite(P26, s26);
+  digitalWrite(P16, s16);
+  digitalWrite(P27, s27);
+  digitalWrite(P17, s17);
 }
 
 void stopAll() {
-  stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
-  stopMotor(R_MOTOR_B_IN1, R_MOTOR_B_IN2);
+  setPins(LOW, LOW, LOW, LOW);
 }
+
+void motorAForward() { stopAll(); delay(10); setPins(LOW, LOW, HIGH, LOW); }
+void motorAReverse() { stopAll(); delay(10); setPins(HIGH, LOW, LOW, LOW); }
+void motorBForward() { stopAll(); delay(10); setPins(LOW, LOW, LOW, HIGH); }
+void motorBReverse() { stopAll(); delay(10); setPins(LOW, HIGH, LOW, LOW); }
+
+void onReceive(const esp_now_recv_info *info, const uint8_t *data, int len) {
+  if (len < 1) return;
+
+  char cmd = (char)data[0];
+
+  Serial.print("Received: ");
+  Serial.println(cmd);
+
+  switch (cmd) {
+    case 'a': motorAForward(); break;
+    case 'z': motorAReverse(); break;
+    case 's': motorBForward(); break;
+    case 'x': motorBReverse(); break;
+    case 'p': stopAll(); break;
+    default:  stopAll(); break;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  pinMode(P26, OUTPUT);
+  pinMode(P16, OUTPUT);
+  pinMode(P27, OUTPUT);
+  pinMode(P17, OUTPUT);
+  stopAll();
+
+  WiFi.mode(WIFI_STA);
+
+  Serial.print("Slave MAC: ");
+  Serial.println(WiFi.macAddress());
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_register_recv_cb(onReceive);
+  Serial.println("SLAVE READY");
+}
+
+void loop() {}
