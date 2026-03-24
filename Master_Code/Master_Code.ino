@@ -21,7 +21,7 @@
 // =====================================================
 
 // Replace with your SLAVE board MAC address
-uint8_t SLAVE_MAC[] = {0xCC, 0xDB, 0xA7, 0x2F, 0x9F, 0x24};
+uint8_t SLAVE_MAC[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};
 
 // =====================================================
 // LEFT HAND HARDWARE
@@ -110,7 +110,7 @@ bool leftCovered = false;
 bool initEspNow();
 bool addSlavePeer();
 bool sendRightPacket(uint8_t command, uint8_t gesture = 0, uint8_t cover = COVER_UNCHANGED);
-void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status);
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 // Left hand control
 void setLeftGesture(char gesture);
@@ -273,7 +273,7 @@ bool sendRightPacket(uint8_t command, uint8_t gesture, uint8_t cover) {
   return (result == ESP_OK);
 }
 
-void onDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   lastSendOk = (status == ESP_NOW_SEND_SUCCESS);
 }
 
