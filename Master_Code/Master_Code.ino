@@ -49,9 +49,9 @@ Servo leftCoverServo;
 const int LEFT_COVER_OPEN_ANGLE   = 90;
 const int LEFT_COVER_CLOSED_ANGLE = 0;
 
-const unsigned long PULL_TIME_ROCK_MS     = 5000;
+const unsigned long PULL_TIME_ROCK_MS     = 6000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
-const unsigned long RESET_TIME_MS         = 5000;
+const unsigned long RESET_TIME_MS         = 3000;
 const unsigned long COVER_WAIT_MS         = 500;
 const unsigned long RESET_WAIT_MS         = 700;
 
@@ -183,7 +183,6 @@ void setup() {
 
   // Safe startup
   setLeftCover(false);
-  resetLeftHandToPaper();
 
   delay(300);
   sendRightCover(false);
@@ -330,23 +329,23 @@ void setLeftCover(bool covered) {
 // MOTOR CONTROL
 // =====================================================
 void motorAForward() {
-  digitalWrite(L_MOTOR_A_IN1, LOW);
-  digitalWrite(L_MOTOR_A_IN2, HIGH);
-}
-
-void motorAReverse() {
   digitalWrite(L_MOTOR_A_IN1, HIGH);
   digitalWrite(L_MOTOR_A_IN2, LOW);
 }
 
+void motorAReverse() {
+  digitalWrite(L_MOTOR_A_IN1, LOW);
+  digitalWrite(L_MOTOR_A_IN2, HIGH);
+}
+
 void motorBForward() {
-  digitalWrite(L_MOTOR_B_IN1, HIGH);
-  digitalWrite(L_MOTOR_B_IN2, LOW);
+  digitalWrite(L_MOTOR_B_IN1, LOW);
+  digitalWrite(L_MOTOR_B_IN2, HIGH);
 }
 
 void motorBReverse() {
-  digitalWrite(L_MOTOR_B_IN1, LOW);
-  digitalWrite(L_MOTOR_B_IN2, HIGH);
+  digitalWrite(L_MOTOR_B_IN1, HIGH);
+  digitalWrite(L_MOTOR_B_IN2, LOW);
 }
 
 void stopMotor(int in1, int in2) {
@@ -389,14 +388,9 @@ void runNewRound() {
   Serial.println();
   Serial.println("=== NEW ROUND ===");
 
-  // Reset both hands to visible + paper
+  // Just make sure both covers are open at the start
   setLeftCover(false);
-  resetLeftHandToPaper();
-
   sendRightCover(false);
-  sendRightReset();
-
-  delay(RESET_WAIT_MS);
 
   chooseStage1Pair(myLeftGesture, myRightGesture);
 
@@ -441,6 +435,15 @@ void resolveStage2(char oppLeft, char oppRight) {
     sendRightCover(true);
     Serial.println("Ambiguous case -> default KEEP LEFT.");
   }
+
+  delay(1500);   // lets you see the result before reset
+
+  // Reset both hands for next round
+  setLeftCover(false);
+  sendRightCover(false);
+
+  resetLeftHandToPaper();
+  sendRightReset();
 
   roundActive = false;
   Serial.println("=== ROUND COMPLETE ===");
