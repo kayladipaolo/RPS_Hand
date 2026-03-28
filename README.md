@@ -58,6 +58,7 @@ struct RightHandPacket {
   uint8_t gesture;
   uint8_t cover;
 };
+```
 
 Supported Commands
 CMD_SET_GESTURE – command the slave to form Rock, Paper, or Scissors
