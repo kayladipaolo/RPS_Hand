@@ -121,6 +121,8 @@ The master code currently uses the following Serial Monitor inputs:
 ```text
 n
 PR
+```
+
 This starts a round and tells the master that the opponent displayed Paper on the left and Rock on the right.
 
 ---
