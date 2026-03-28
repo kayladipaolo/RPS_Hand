@@ -121,3 +121,53 @@ The master code currently uses the following Serial Monitor inputs:
 ```text
 n
 PR
+This starts a round and tells the master that the opponent displayed Paper on the left and Rock on the right.
+
+---
+
+## Files in This Repository
+
+This repository includes both final system code and supporting test code used during development:
+
+- Final master board code  
+- Final slave board code  
+- ESP-NOW communication test code  
+- Motor driver and direction test code  
+- Servo test code  
+- MAC address check utility  
+
+These test files were used to isolate hardware behavior, verify motor directions, confirm servo motion, and validate communication before full system integration.
+
+---
+
+## Setup Instructions
+
+1. Upload the **slave code** to the ESP32 controlling the right hand  
+2. Open the Serial Monitor and record the slave MAC address  
+3. Update the `SLAVE_MAC` value in the master code  
+4. Upload the **master code** to the ESP32 controlling the left hand  
+5. Power both systems  
+6. Open the Serial Monitor on the master board  
+7. Start a round using `n`  
+8. Enter the opponent pair when prompted  
+
+---
+
+## Notes and Limitations
+
+- Gesture timing is based on fixed motor delays (no feedback control)  
+- Timing values are experimentally tuned and may vary depending on build quality  
+- The system assumes **Paper** as the default reset position  
+- Opponent input is manual (Serial Monitor), not automated  
+- Performance depends on mechanical consistency and alignment  
+
+---
+
+## Future Improvements
+
+- Sensor feedback for gesture confirmation  
+- Computer vision for opponent detection  
+- Closed-loop motor control  
+- Improved mechanical linkage design  
+- Wireless acknowledgement / retry system  
+- Fully autonomous interface without Serial input  
