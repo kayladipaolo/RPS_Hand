@@ -13,10 +13,10 @@ The system combines:
 ## System Architecture
 
 ### Master Board
-The master board controls the **left robotic hand locally** and handles all high-level game logic. It selects the stage one pair, receives the opponent input through the Serial Monitor, decides which final hand to keep, and sends commands wirelessly to the slave board. The master implementation includes local motor control, local servo cover control, ESP-NOW transmission, and round strategy logic. :contentReference[oaicite:0]{index=0}
+The master board controls the **left robotic hand locally** and handles all high-level game logic. It selects the stage one pair, receives the opponent input through the Serial Monitor, decides which final hand to keep, and sends commands wirelessly to the slave board. The master implementation includes local motor control, local servo cover control, ESP-NOW transmission, and round strategy logic. 
 
 ### Slave Board
-The slave board controls the **right robotic hand only**. It does not make any strategic decisions. Instead, it receives structured packets from the master, executes the requested gesture or cover state, and resets the hand when commanded. The slave code processes only the newest packet using sequence numbers to reduce the chance of repeated or stale actions. :contentReference[oaicite:1]{index=1}
+The slave board controls the **right robotic hand only**. It does not make any strategic decisions. Instead, it receives structured packets from the master, executes the requested gesture or cover state, and resets the hand when commanded. The slave code processes only the newest packet using sequence numbers to reduce the chance of repeated or stale actions. 
 
 ## Hardware Configuration
 
