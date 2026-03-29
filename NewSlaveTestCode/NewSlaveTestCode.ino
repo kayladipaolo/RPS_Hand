@@ -17,7 +17,7 @@ Servo rightCoverServo;
 // TUNING
 // =====================================================
 const int RIGHT_COVER_OPEN_ANGLE = 90;
-const unsigned long PULL_TIME_ROCK_MS = 5000;
+const unsigned long PULL_TIME_SCISSORS_MS = 6000;
 
 // =====================================================
 // COMMAND PROTOCOL
@@ -43,7 +43,7 @@ RightHandPacket pendingPacket;
 bool initEspNow();
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
 
-void setRightRock();
+void setRightScissors();
 void setRightCoverOpen();
 
 void motorAForward();
@@ -71,7 +71,7 @@ void setup() {
   WiFi.disconnect();
 
   Serial.println();
-  Serial.println("=== SLAVE ROCK TEST ===");
+  Serial.println("=== SLAVE SCISSORS TEST ===");
   Serial.print("Slave MAC: ");
   Serial.println(WiFi.macAddress());
 
@@ -82,7 +82,7 @@ void setup() {
 
   setRightCoverOpen();
 
-  Serial.println("Waiting for ROCK command from master...");
+  Serial.println("Waiting for SCISSORS command from master...");
 }
 
 // =====================================================
@@ -102,9 +102,9 @@ void loop() {
     Serial.print(" gesture=");
     Serial.println((char)pkt.gesture);
 
-    if (pkt.command == CMD_SET_GESTURE && pkt.gesture == 'R') {
-      Serial.println("RIGHT HAND -> ROCK");
-      setRightRock();
+    if (pkt.command == CMD_SET_GESTURE && pkt.gesture == 'S') {
+      Serial.println("RIGHT HAND -> SCISSORS");
+      setRightScissors();
     }
   }
 }
@@ -132,10 +132,11 @@ void setRightCoverOpen() {
   rightCoverServo.write(RIGHT_COVER_OPEN_ANGLE);
 }
 
-void setRightRock() {
-  motorAForward();
+void setRightScissors() {
+  // Scissors = use Motor B only
+  stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
   motorBForward();
-  delay(PULL_TIME_ROCK_MS);
+  delay(PULL_TIME_SCISSORS_MS);
   stopRightHand();
 }
 

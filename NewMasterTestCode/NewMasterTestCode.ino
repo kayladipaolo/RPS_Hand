@@ -5,7 +5,7 @@
 // =====================================================
 // SLAVE MAC ADDRESS
 // =====================================================
-uint8_t SLAVE_MAC[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};
+uint8_t SLAVE_MAC[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};  // replace if needed
 
 // =====================================================
 // LEFT HAND HARDWARE
@@ -22,7 +22,7 @@ Servo leftCoverServo;
 // TUNING
 // =====================================================
 const int LEFT_COVER_OPEN_ANGLE = 90;
-const unsigned long PULL_TIME_ROCK_MS = 6000;
+const unsigned long PULL_TIME_SCISSORS_MS = 6000;
 
 // =====================================================
 // COMMAND PROTOCOL
@@ -47,11 +47,11 @@ volatile bool lastSendOk = false;
 // =====================================================
 bool initEspNow();
 bool addSlavePeer();
-bool sendRightRock();
+bool sendRightScissors();
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
-void setLeftRock();
+void setLeftScissors();
 void setLeftCoverOpen();
 
 void motorAForward();
@@ -79,7 +79,7 @@ void setup() {
   WiFi.disconnect();
 
   Serial.println();
-  Serial.println("=== MASTER ROCK TEST ===");
+  Serial.println("=== MASTER SCISSORS TEST ===");
   Serial.print("Master MAC: ");
   Serial.println(WiFi.macAddress());
 
@@ -96,13 +96,13 @@ void setup() {
   setLeftCoverOpen();
   delay(500);
 
-  Serial.println("LEFT HAND -> ROCK");
-  setLeftRock();
+  Serial.println("LEFT HAND -> SCISSORS");
+  setLeftScissors();
 
   delay(500);
 
-  Serial.println("RIGHT HAND CMD -> ROCK");
-  sendRightRock();
+  Serial.println("RIGHT HAND CMD -> SCISSORS");
+  sendRightScissors();
 }
 
 // =====================================================
@@ -132,11 +132,11 @@ bool addSlavePeer() {
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
 
-bool sendRightRock() {
+bool sendRightScissors() {
   RightHandPacket pkt;
   pkt.seq = txSequence++;
   pkt.command = CMD_SET_GESTURE;
-  pkt.gesture = 'R';
+  pkt.gesture = 'S';
   pkt.cover = 0;
 
   lastSendOk = false;
@@ -171,10 +171,11 @@ void setLeftCoverOpen() {
   leftCoverServo.write(LEFT_COVER_OPEN_ANGLE);
 }
 
-void setLeftRock() {
+void setLeftScissors() {
+  // Scissors = pull in thumb + ring + pinky only
   motorAForward();
-  motorBForward();
-  delay(PULL_TIME_ROCK_MS);
+  stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+  delay(PULL_TIME_SCISSORS_MS);
   stopLeftHand();
 }
 
