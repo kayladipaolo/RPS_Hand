@@ -3,30 +3,27 @@
 #include <ESP32Servo.h>
 
 /*
-  CLEAN MASTER BOARD
-  ------------------
+  FULL MASTER BOARD
+  -----------------
   - Controls LEFT hand locally
   - Runs RPS Minus One strategy
   - Sends RIGHT hand commands wirelessly via ESP-NOW
 
   SERIAL MONITOR COMMANDS:
-    n      -> start a new round
-    PR     -> opponent left=P, opponent right=R
-    RS     -> opponent left=R, opponent right=S
+    n      -> start new round
+    PR     -> enter opponent left=P, right=R
+    RS     -> enter opponent left=R, right=S
     etc.
 */
 
 // =====================================================
 // CONFIG
 // =====================================================
-
-// Replace with your SLAVE board MAC address
 uint8_t SLAVE_MAC[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};
 
 // =====================================================
 // LEFT HAND HARDWARE
 // =====================================================
-
 // Motor A = thumb + ring + pinky
 const int L_MOTOR_A_IN1 = 26;
 const int L_MOTOR_A_IN2 = 16;
@@ -51,9 +48,13 @@ const int LEFT_COVER_CLOSED_ANGLE = 0;
 
 const unsigned long PULL_TIME_ROCK_MS     = 6000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
+
+// reset timing for left hand
 const unsigned long RESET_TIME_MS         = 3000;
+
 const unsigned long COVER_WAIT_MS         = 500;
-const unsigned long RESET_WAIT_MS         = 700;
+const unsigned long BETWEEN_RIGHT_CMDS_MS = 150;
+const unsigned long RESULT_VIEW_MS        = 1500;
 
 // =====================================================
 // GAME SYMBOLS
@@ -81,8 +82,8 @@ enum CoverState : uint8_t {
 struct RightHandPacket {
   uint32_t seq;
   uint8_t command;
-  uint8_t gesture;   // 'R', 'P', 'S' if needed
-  uint8_t cover;     // CoverState
+  uint8_t gesture;
+  uint8_t cover;
 };
 
 uint32_t txSequence = 1;
@@ -97,15 +98,8 @@ bool roundActive = false;
 int lastChoice = -1;
 
 // =====================================================
-// MASTER LOCAL STATE
-// =====================================================
-char leftCurrentGesture = PAPER;
-bool leftCovered = false;
-
-// =====================================================
 // FUNCTION DECLARATIONS
 // =====================================================
-
 // ESP-NOW
 bool initEspNow();
 bool addSlavePeer();
@@ -152,7 +146,6 @@ void setup() {
 
   randomSeed(esp_random());
 
-  // Local hardware
   pinMode(L_MOTOR_A_IN1, OUTPUT);
   pinMode(L_MOTOR_A_IN2, OUTPUT);
   pinMode(L_MOTOR_B_IN1, OUTPUT);
@@ -162,7 +155,6 @@ void setup() {
 
   leftCoverServo.attach(LEFT_COVER_SERVO_PIN);
 
-  // Wi-Fi / ESP-NOW
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
 
@@ -181,9 +173,8 @@ void setup() {
     while (true) delay(1000);
   }
 
-  // Safe startup
+  // safe startup
   setLeftCover(false);
-
   delay(300);
   sendRightCover(false);
 
@@ -257,6 +248,8 @@ bool sendRightPacket(uint8_t command, uint8_t gesture, uint8_t cover) {
   pkt.gesture = gesture;
   pkt.cover = cover;
 
+  lastSendOk = false;
+
   esp_err_t result = esp_now_send(SLAVE_MAC, (uint8_t *)&pkt, sizeof(pkt));
 
   Serial.print("Sent packet seq=");
@@ -268,7 +261,14 @@ bool sendRightPacket(uint8_t command, uint8_t gesture, uint8_t cover) {
   Serial.print(" cover=");
   Serial.println(pkt.cover);
 
-  return (result == ESP_OK);
+  delay(BETWEEN_RIGHT_CMDS_MS);
+
+  if (result != ESP_OK) {
+    Serial.println("ESP-NOW send queue failed.");
+    return false;
+  }
+
+  return true;
 }
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -290,12 +290,15 @@ void setLeftGesture(char gesture) {
     return;
   }
   else if (gesture == ROCK) {
+    Serial.println("LEFT ROCK: motorAForward + motorBForward");
     motorAForward();
     motorBForward();
     delay(PULL_TIME_ROCK_MS);
     stopLeftHand();
   }
   else if (gesture == SCISSORS) {
+    // VERIFIED WORKING: LEFT scissors uses Motor A only
+    Serial.println("LEFT SCISSORS: motorAForward only");
     motorAForward();
     stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
     delay(PULL_TIME_SCISSORS_MS);
@@ -309,8 +312,6 @@ void resetLeftHandToPaper() {
   motorBReverse();
   delay(RESET_TIME_MS);
   stopLeftHand();
-  delay(150);
-  leftCurrentGesture = PAPER;
 }
 
 void setLeftCover(bool covered) {
@@ -364,20 +365,17 @@ void sendRightGesture(char gesture) {
   Serial.print("RIGHT CMD -> gesture ");
   Serial.println(gesture);
   sendRightPacket(CMD_SET_GESTURE, (uint8_t)gesture, COVER_UNCHANGED);
-  delay(50);
 }
 
 void sendRightCover(bool covered) {
   Serial.print("RIGHT CMD -> ");
   Serial.println(covered ? "cover" : "uncover");
   sendRightPacket(CMD_SET_COVER, 0, covered ? COVER_CLOSED : COVER_OPEN);
-  delay(50);
 }
 
 void sendRightReset() {
   Serial.println("RIGHT CMD -> reset");
   sendRightPacket(CMD_RESET_HAND, 0, COVER_UNCHANGED);
-  delay(50);
 }
 
 // =====================================================
@@ -387,7 +385,7 @@ void runNewRound() {
   Serial.println();
   Serial.println("=== NEW ROUND ===");
 
-  // Just make sure both covers are open at the start
+  // keep both hands visible at stage 1
   setLeftCover(false);
   sendRightCover(false);
 
@@ -397,6 +395,7 @@ void runNewRound() {
   Serial.print(myLeftGesture);
   Serial.println(myRightGesture);
 
+  // execute both stage-1 gestures
   setLeftGesture(myLeftGesture);
   sendRightGesture(myRightGesture);
 
@@ -435,12 +434,13 @@ void resolveStage2(char oppLeft, char oppRight) {
     Serial.println("Ambiguous case -> default KEEP LEFT.");
   }
 
-  delay(1500);   // lets you see the result before reset
+  delay(RESULT_VIEW_MS);
 
-  // Reset both hands for next round
+  // reveal both again before reset
   setLeftCover(false);
   sendRightCover(false);
 
+  // now reset both back to paper
   resetLeftHandToPaper();
   sendRightReset();
 
@@ -533,7 +533,7 @@ char chooseFinalHand(char myA, char myB, char oppA, char oppB) {
   char shared = getSharedHand(myA, myB, oppA, oppB);
   char other  = getOtherHand(myA, myB, shared);
 
-  int roll = random(0, 3); // 0,1,2
+  int roll = random(0, 3);
   if (roll < 2) {
     return shared; // 2/3
   } else {

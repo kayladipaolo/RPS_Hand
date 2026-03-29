@@ -3,8 +3,8 @@
 #include <ESP32Servo.h>
 
 /*
-  CLEAN SLAVE BOARD
-  -----------------
+  FULL SLAVE BOARD
+  ----------------
   - Controls RIGHT hand only
   - Receives commands from master via ESP-NOW
   - No game logic on this board
@@ -13,7 +13,6 @@
 // =====================================================
 // RIGHT HAND HARDWARE
 // =====================================================
-
 // Motor A = thumb + ring + pinky
 const int R_MOTOR_A_IN1 = 26;
 const int R_MOTOR_A_IN2 = 16;
@@ -72,15 +71,14 @@ struct RightHandPacket {
 };
 
 // =====================================================
-// STATE
+// PACKET QUEUE
 // =====================================================
-char rightCurrentGesture = PAPER;
-bool rightCovered = false;
+const int RX_QUEUE_SIZE = 8;
+volatile int rxHead = 0;
+volatile int rxTail = 0;
+volatile bool rxOverflow = false;
 
-volatile bool packetPending = false;
-volatile uint32_t newestSeqSeen = 0;
-
-RightHandPacket pendingPacket;
+RightHandPacket rxQueue[RX_QUEUE_SIZE];
 uint32_t lastProcessedSeq = 0;
 
 // =====================================================
@@ -88,6 +86,11 @@ uint32_t lastProcessedSeq = 0;
 // =====================================================
 bool initEspNow();
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+
+bool queueIsEmpty();
+bool queueIsFull();
+void enqueuePacket(const RightHandPacket &pkt);
+bool dequeuePacket(RightHandPacket &pkt);
 
 void executePacket(const RightHandPacket &pkt);
 
@@ -131,7 +134,6 @@ void setup() {
     while (true) delay(1000);
   }
 
-  // Safe startup
   setRightCover(false);
 
   Serial.println("=== SLAVE READY ===");
@@ -141,16 +143,18 @@ void setup() {
 // LOOP
 // =====================================================
 void loop() {
-  if (packetPending) {
-    noInterrupts();
-    RightHandPacket pkt = pendingPacket;
-    packetPending = false;
-    interrupts();
+  RightHandPacket pkt;
 
+  if (dequeuePacket(pkt)) {
     if (pkt.seq > lastProcessedSeq) {
       executePacket(pkt);
       lastProcessedSeq = pkt.seq;
     }
+  }
+
+  if (rxOverflow) {
+    Serial.println("WARNING: RX queue overflow occurred.");
+    rxOverflow = false;
   }
 }
 
@@ -171,13 +175,46 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 
   RightHandPacket pkt;
   memcpy(&pkt, data, sizeof(pkt));
+  enqueuePacket(pkt);
+}
 
-  // Keep only newest packet
-  if (pkt.seq >= newestSeqSeen) {
-    newestSeqSeen = pkt.seq;
-    pendingPacket = pkt;
-    packetPending = true;
+// =====================================================
+// QUEUE
+// =====================================================
+bool queueIsEmpty() {
+  return (rxHead == rxTail);
+}
+
+bool queueIsFull() {
+  return (((rxHead + 1) % RX_QUEUE_SIZE) == rxTail);
+}
+
+void enqueuePacket(const RightHandPacket &pkt) {
+  noInterrupts();
+
+  if (!queueIsFull()) {
+    rxQueue[rxHead] = pkt;
+    rxHead = (rxHead + 1) % RX_QUEUE_SIZE;
+  } else {
+    rxOverflow = true;
   }
+
+  interrupts();
+}
+
+bool dequeuePacket(RightHandPacket &pkt) {
+  bool hasPacket = false;
+
+  noInterrupts();
+
+  if (!queueIsEmpty()) {
+    pkt = rxQueue[rxTail];
+    rxTail = (rxTail + 1) % RX_QUEUE_SIZE;
+    hasPacket = true;
+  }
+
+  interrupts();
+  return hasPacket;
 }
 
 // =====================================================
@@ -230,14 +267,17 @@ void setRightGesture(char gesture) {
     return;
   }
   else if (gesture == ROCK) {
+    Serial.println("RIGHT ROCK: motorAForward + motorBForward");
     motorAForward();
     motorBForward();
     delay(PULL_TIME_ROCK_MS);
     stopRightHand();
   }
   else if (gesture == SCISSORS) {
-    motorAForward();
-    stopMotor(R_MOTOR_B_IN1, R_MOTOR_B_IN2);
+    // VERIFIED WORKING: RIGHT scissors uses Motor B only
+    Serial.println("RIGHT SCISSORS: motorBForward only");
+    stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
+    motorBForward();
     delay(PULL_TIME_SCISSORS_MS);
     stopRightHand();
   }
@@ -249,8 +289,6 @@ void resetRightHandToPaper() {
   motorBReverse();
   delay(RESET_TIME_MS);
   stopRightHand();
-  delay(150);
-  rightCurrentGesture = PAPER;
 }
 
 void setRightCover(bool covered) {
@@ -268,23 +306,23 @@ void setRightCover(bool covered) {
 // MOTOR CONTROL
 // =====================================================
 void motorAForward() {
-  digitalWrite(R_MOTOR_A_IN1, HIGH);
-  digitalWrite(R_MOTOR_A_IN2, LOW);
-}
-
-void motorAReverse() {
   digitalWrite(R_MOTOR_A_IN1, LOW);
   digitalWrite(R_MOTOR_A_IN2, HIGH);
 }
 
+void motorAReverse() {
+  digitalWrite(R_MOTOR_A_IN1, HIGH);
+  digitalWrite(R_MOTOR_A_IN2, LOW);
+}
+
 void motorBForward() {
-  digitalWrite(R_MOTOR_B_IN1, LOW);
-  digitalWrite(R_MOTOR_B_IN2, HIGH);
+  digitalWrite(R_MOTOR_B_IN1, HIGH);
+  digitalWrite(R_MOTOR_B_IN2, LOW);
 }
 
 void motorBReverse() {
-  digitalWrite(R_MOTOR_B_IN1, HIGH);
-  digitalWrite(R_MOTOR_B_IN2, LOW);
+  digitalWrite(R_MOTOR_B_IN1, LOW);
+  digitalWrite(R_MOTOR_B_IN2, HIGH);
 }
 
 void stopMotor(int in1, int in2) {
