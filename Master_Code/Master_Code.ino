@@ -186,7 +186,6 @@ void setup() {
 
   delay(300);
   sendRightCover(false);
-  sendRightReset();
 
   Serial.println("=== MASTER READY ===");
   Serial.println("Type:");

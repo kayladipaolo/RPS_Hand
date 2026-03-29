@@ -133,7 +133,6 @@ void setup() {
 
   // Safe startup
   setRightCover(false);
-  resetRightHandToPaper();
 
   Serial.println("=== SLAVE READY ===");
 }
@@ -269,23 +268,23 @@ void setRightCover(bool covered) {
 // MOTOR CONTROL
 // =====================================================
 void motorAForward() {
-  digitalWrite(R_MOTOR_A_IN1, LOW);
-  digitalWrite(R_MOTOR_A_IN2, HIGH);
-}
-
-void motorAReverse() {
   digitalWrite(R_MOTOR_A_IN1, HIGH);
   digitalWrite(R_MOTOR_A_IN2, LOW);
 }
 
+void motorAReverse() {
+  digitalWrite(R_MOTOR_A_IN1, LOW);
+  digitalWrite(R_MOTOR_A_IN2, HIGH);
+}
+
 void motorBForward() {
-  digitalWrite(R_MOTOR_B_IN1, HIGH);
-  digitalWrite(R_MOTOR_B_IN2, LOW);
+  digitalWrite(R_MOTOR_B_IN1, LOW);
+  digitalWrite(R_MOTOR_B_IN2, HIGH);
 }
 
 void motorBReverse() {
-  digitalWrite(R_MOTOR_B_IN1, LOW);
-  digitalWrite(R_MOTOR_B_IN2, HIGH);
+  digitalWrite(R_MOTOR_B_IN1, HIGH);
+  digitalWrite(R_MOTOR_B_IN2, LOW);
 }
 
 void stopMotor(int in1, int in2) {
