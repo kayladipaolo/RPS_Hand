@@ -13,7 +13,9 @@
     n      -> start new round
     PR     -> enter opponent left=P, right=R
     RS     -> enter opponent left=R, right=S
-    etc.
+    m      -> reset MASTER hand to paper
+    s      -> reset SLAVE hand to paper
+    v      -> reset BOTH servos to open
 */
 
 // =====================================================
@@ -49,8 +51,9 @@ const int LEFT_COVER_CLOSED_ANGLE = 0;
 const unsigned long PULL_TIME_ROCK_MS     = 6000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 
-// reset timing for left hand
-const unsigned long RESET_TIME_MS         = 3000;
+// separate reset timings for left hand
+const unsigned long RESET_TIME_A_MS       = 2000;  // thumb + ring + pinky
+const unsigned long RESET_TIME_B_MS       = 5000;  // index + middle
 
 const unsigned long COVER_WAIT_MS         = 500;
 const unsigned long BETWEEN_RIGHT_CMDS_MS = 150;
@@ -182,6 +185,9 @@ void setup() {
   Serial.println("Type:");
   Serial.println("  n   -> start new round");
   Serial.println("  PR  -> enter opponent pair");
+  Serial.println("  m   -> reset MASTER hand to paper");
+  Serial.println("  s   -> reset SLAVE hand to paper");
+  Serial.println("  v   -> reset BOTH servos to OPEN");
   Serial.println();
 }
 
@@ -197,6 +203,19 @@ void loop() {
     if (input == "N") {
       runNewRound();
     }
+    else if (input == "M") {
+      Serial.println("MANUAL RESET -> MASTER hand to PAPER");
+      resetLeftHandToPaper();
+    }
+    else if (input == "S") {
+      Serial.println("MANUAL RESET -> SLAVE hand to PAPER");
+      sendRightReset();
+    }
+    else if (input == "V") {
+      Serial.println("MANUAL RESET -> BOTH servos OPEN");
+      setLeftCover(false);
+      sendRightCover(false);
+    }
     else if (input.length() == 2 && roundActive) {
       char oppLeft = input.charAt(0);
       char oppRight = input.charAt(1);
@@ -211,7 +230,7 @@ void loop() {
       }
     }
     else {
-      Serial.println("Unknown command. Type n to start a round.");
+      Serial.println("Unknown command.");
     }
   }
 }
@@ -308,9 +327,28 @@ void setLeftGesture(char gesture) {
 
 void resetLeftHandToPaper() {
   Serial.println("LEFT -> reset to PAPER");
+
   motorAReverse();
   motorBReverse();
-  delay(RESET_TIME_MS);
+
+  unsigned long startTime = millis();
+  bool motorAStopped = false;
+  bool motorBStopped = false;
+
+  while (!motorAStopped || !motorBStopped) {
+    unsigned long elapsed = millis() - startTime;
+
+    if (!motorAStopped && elapsed >= RESET_TIME_A_MS) {
+      stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+      motorAStopped = true;
+    }
+
+    if (!motorBStopped && elapsed >= RESET_TIME_B_MS) {
+      stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+      motorBStopped = true;
+    }
+  }
+
   stopLeftHand();
 }
 
@@ -436,16 +474,14 @@ void resolveStage2(char oppLeft, char oppRight) {
 
   delay(RESULT_VIEW_MS);
 
-  // reveal both again before reset
+  // reveal both again
   setLeftCover(false);
   sendRightCover(false);
 
-  // now reset both back to paper
-  resetLeftHandToPaper();
-  sendRightReset();
-
+  // no automatic hand reset anymore
   roundActive = false;
   Serial.println("=== ROUND COMPLETE ===");
+  Serial.println("Use m, s, or v for manual resets.");
   Serial.println();
 }
 
