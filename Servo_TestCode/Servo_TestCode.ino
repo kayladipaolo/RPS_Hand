@@ -3,7 +3,7 @@
 Servo testServo;
 
 // Change this to your servo signal pin
-const int SERVO_PIN = 17;
+const int SERVO_PIN = 4;
 
 void setup() {
   Serial.begin(115200);

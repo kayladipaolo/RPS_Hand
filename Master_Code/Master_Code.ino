@@ -48,7 +48,7 @@ Servo leftCoverServo;
 const int LEFT_COVER_OPEN_ANGLE   = 90;
 const int LEFT_COVER_CLOSED_ANGLE = 0;
 
-const unsigned long PULL_TIME_ROCK_MS     = 6000;
+const unsigned long PULL_TIME_ROCK_MS     = 5000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 
 // separate reset timings for left hand

@@ -5,12 +5,12 @@
 
 // -------- PIN ASSIGNMENTS --------
 // Motor A
-const int MOTOR_A_IN1 = 26;
+const int MOTOR_A_IN1 = 17;
 const int MOTOR_A_IN2 = 16;
 
 // Motor B
 const int MOTOR_B_IN1 = 27;
-const int MOTOR_B_IN2 = 17;
+const int MOTOR_B_IN2 = 26;
 
 // -------- TIMING --------
 const unsigned long RUN_TIME_MS  = 2000;
@@ -63,7 +63,6 @@ void loop() {
 // MOTOR A FUNCTIONS
 // =====================================
 void motorAForward() {
-  // swapped because A was backwards
   digitalWrite(MOTOR_A_IN1, LOW);
   digitalWrite(MOTOR_A_IN2, HIGH);
 }
@@ -77,13 +76,14 @@ void motorAReverse() {
 // MOTOR B FUNCTIONS
 // =====================================
 void motorBForward() {
-  digitalWrite(MOTOR_B_IN1, HIGH);
-  digitalWrite(MOTOR_B_IN2, LOW);
+  // swapped because B was backwards
+  digitalWrite(MOTOR_B_IN1, LOW);
+  digitalWrite(MOTOR_B_IN2, HIGH);
 }
 
 void motorBReverse() {
-  digitalWrite(MOTOR_B_IN1, LOW);
-  digitalWrite(MOTOR_B_IN2, HIGH);
+  digitalWrite(MOTOR_B_IN1, HIGH);
+  digitalWrite(MOTOR_B_IN2, LOW);
 }
 
 // =====================================
