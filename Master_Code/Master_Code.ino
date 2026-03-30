@@ -26,13 +26,13 @@ uint8_t SLAVE_MAC[] = {0xEC, 0x64, 0xC9, 0x5E, 0x80, 0x4C};
 // =====================================================
 // LEFT HAND HARDWARE
 // =====================================================
-// Motor A = thumb + ring + pinky
-const int L_MOTOR_A_IN1 = 26;
+// Motor A = index + middle
+const int L_MOTOR_A_IN1 = 17;
 const int L_MOTOR_A_IN2 = 16;
 
-// Motor B = index + middle
+// Motor B = thumb + ring + pinky
 const int L_MOTOR_B_IN1 = 27;
-const int L_MOTOR_B_IN2 = 17;
+const int L_MOTOR_B_IN2 = 26;
 
 // Cover servo
 const int LEFT_COVER_SERVO_PIN = 4;
@@ -52,8 +52,8 @@ const unsigned long PULL_TIME_ROCK_MS     = 5000;
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 
 // separate reset timings for left hand
-const unsigned long RESET_TIME_A_MS       = 2000;  // thumb + ring + pinky
-const unsigned long RESET_TIME_B_MS       = 5000;  // index + middle
+const unsigned long RESET_TIME_A_MS       = 3000;  // index + middle
+const unsigned long RESET_TIME_B_MS       = 2000;  // thumb + ring + pinky
 
 const unsigned long COVER_WAIT_MS         = 500;
 const unsigned long BETWEEN_RIGHT_CMDS_MS = 150;
@@ -316,10 +316,10 @@ void setLeftGesture(char gesture) {
     stopLeftHand();
   }
   else if (gesture == SCISSORS) {
-    // VERIFIED WORKING: LEFT scissors uses Motor A only
-    Serial.println("LEFT SCISSORS: motorAForward only");
-    motorAForward();
-    stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+    // Scissors = curl thumb + ring + pinky only
+    Serial.println("LEFT SCISSORS: motorBForward only");
+    stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+    motorBForward();
     delay(PULL_TIME_SCISSORS_MS);
     stopLeftHand();
   }
@@ -365,15 +365,16 @@ void setLeftCover(bool covered) {
 
 // =====================================================
 // MOTOR CONTROL
+// Working direction map from your motor test
 // =====================================================
 void motorAForward() {
-  digitalWrite(L_MOTOR_A_IN1, HIGH);
-  digitalWrite(L_MOTOR_A_IN2, LOW);
+  digitalWrite(L_MOTOR_A_IN1, LOW);
+  digitalWrite(L_MOTOR_A_IN2, HIGH);
 }
 
 void motorAReverse() {
-  digitalWrite(L_MOTOR_A_IN1, LOW);
-  digitalWrite(L_MOTOR_A_IN2, HIGH);
+  digitalWrite(L_MOTOR_A_IN1, HIGH);
+  digitalWrite(L_MOTOR_A_IN2, LOW);
 }
 
 void motorBForward() {
