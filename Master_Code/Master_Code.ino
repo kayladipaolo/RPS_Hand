@@ -15,6 +15,7 @@
     RS     -> enter opponent left=R, right=S
     m      -> reset MASTER hand to paper
     s      -> reset SLAVE hand to paper
+    c      -> reset SLAVE hand from scissors to paper
     v      -> reset BOTH servos to open
 */
 
@@ -41,6 +42,7 @@ const int LEFT_COVER_SERVO_PIN = 4;
 // SERVO
 // =====================================================
 Servo leftCoverServo;
+bool leftServoAttached = false;
 
 // =====================================================
 // TUNING
@@ -48,12 +50,15 @@ Servo leftCoverServo;
 const int LEFT_COVER_OPEN_ANGLE   = 90;
 const int LEFT_COVER_CLOSED_ANGLE = 0;
 
-const unsigned long PULL_TIME_ROCK_MS     = 5000;
+// separate rock timings for left hand
+const unsigned long PULL_TIME_ROCK_A_MS   = 5000;
+const unsigned long PULL_TIME_ROCK_B_MS   = 5000;
+
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 
 // separate reset timings for left hand
-const unsigned long RESET_TIME_A_MS       = 3000;  // index + middle
-const unsigned long RESET_TIME_B_MS       = 2000;  // thumb + ring + pinky
+const unsigned long RESET_TIME_A_MS       = 2500;
+const unsigned long RESET_TIME_B_MS       = 2500;
 
 const unsigned long COVER_WAIT_MS         = 500;
 const unsigned long BETWEEN_RIGHT_CMDS_MS = 150;
@@ -70,10 +75,11 @@ const char SCISSORS = 'S';
 // COMMAND PROTOCOL
 // =====================================================
 enum CommandType : uint8_t {
-  CMD_NONE = 0,
-  CMD_SET_GESTURE = 1,
-  CMD_SET_COVER   = 2,
-  CMD_RESET_HAND  = 3
+  CMD_NONE            = 0,
+  CMD_SET_GESTURE     = 1,
+  CMD_SET_COVER       = 2,
+  CMD_RESET_HAND      = 3,
+  CMD_RESET_SCISSORS  = 4
 };
 
 enum CoverState : uint8_t {
@@ -103,13 +109,11 @@ int lastChoice = -1;
 // =====================================================
 // FUNCTION DECLARATIONS
 // =====================================================
-// ESP-NOW
 bool initEspNow();
 bool addSlavePeer();
 bool sendRightPacket(uint8_t command, uint8_t gesture = 0, uint8_t cover = COVER_UNCHANGED);
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
-// Left hand control
 void setLeftGesture(char gesture);
 void resetLeftHandToPaper();
 void setLeftCover(bool covered);
@@ -121,12 +125,11 @@ void motorBReverse();
 void stopMotor(int in1, int in2);
 void stopLeftHand();
 
-// Right hand wireless wrappers
 void sendRightGesture(char gesture);
 void sendRightCover(bool covered);
 void sendRightReset();
+void sendRightScissorsReset();
 
-// Game logic
 int rpsResult(char a, char b);
 bool isIdenticalPair(char a, char b);
 bool samePairIgnoringOrder(char a1, char a2, char b1, char b2);
@@ -156,7 +159,14 @@ void setup() {
 
   stopLeftHand();
 
+  // only attach long enough to move, then detach to reduce shaking
   leftCoverServo.attach(LEFT_COVER_SERVO_PIN);
+  leftServoAttached = true;
+  delay(300);
+  leftCoverServo.write(LEFT_COVER_OPEN_ANGLE);
+  delay(1000);
+  leftCoverServo.detach();
+  leftServoAttached = false;
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -176,7 +186,6 @@ void setup() {
     while (true) delay(1000);
   }
 
-  // safe startup
   setLeftCover(false);
   delay(300);
   sendRightCover(false);
@@ -187,6 +196,7 @@ void setup() {
   Serial.println("  PR  -> enter opponent pair");
   Serial.println("  m   -> reset MASTER hand to paper");
   Serial.println("  s   -> reset SLAVE hand to paper");
+  Serial.println("  c   -> reset SLAVE hand from scissors to paper");
   Serial.println("  v   -> reset BOTH servos to OPEN");
   Serial.println();
 }
@@ -210,6 +220,10 @@ void loop() {
     else if (input == "S") {
       Serial.println("MANUAL RESET -> SLAVE hand to PAPER");
       sendRightReset();
+    }
+    else if (input == "C") {
+      Serial.println("MANUAL RESET -> SLAVE scissors to PAPER");
+      sendRightScissorsReset();
     }
     else if (input == "V") {
       Serial.println("MANUAL RESET -> BOTH servos OPEN");
@@ -310,13 +324,31 @@ void setLeftGesture(char gesture) {
   }
   else if (gesture == ROCK) {
     Serial.println("LEFT ROCK: motorAForward + motorBForward");
+
     motorAForward();
     motorBForward();
-    delay(PULL_TIME_ROCK_MS);
+
+    unsigned long startTime = millis();
+    bool motorAStopped = false;
+    bool motorBStopped = false;
+
+    while (!motorAStopped || !motorBStopped) {
+      unsigned long elapsed = millis() - startTime;
+
+      if (!motorAStopped && elapsed >= PULL_TIME_ROCK_A_MS) {
+        stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
+        motorAStopped = true;
+      }
+
+      if (!motorBStopped && elapsed >= PULL_TIME_ROCK_B_MS) {
+        stopMotor(L_MOTOR_B_IN1, L_MOTOR_B_IN2);
+        motorBStopped = true;
+      }
+    }
+
     stopLeftHand();
   }
   else if (gesture == SCISSORS) {
-    // Scissors = curl thumb + ring + pinky only
     Serial.println("LEFT SCISSORS: motorBForward only");
     stopMotor(L_MOTOR_A_IN1, L_MOTOR_A_IN2);
     motorBForward();
@@ -353,6 +385,12 @@ void resetLeftHandToPaper() {
 }
 
 void setLeftCover(bool covered) {
+  if (!leftServoAttached) {
+    leftCoverServo.attach(LEFT_COVER_SERVO_PIN);
+    leftServoAttached = true;
+    delay(50);
+  }
+
   if (covered) {
     Serial.println("LEFT COVER -> CLOSE");
     leftCoverServo.write(LEFT_COVER_CLOSED_ANGLE);
@@ -360,12 +398,15 @@ void setLeftCover(bool covered) {
     Serial.println("LEFT COVER -> OPEN");
     leftCoverServo.write(LEFT_COVER_OPEN_ANGLE);
   }
+
   delay(COVER_WAIT_MS);
+
+  leftCoverServo.detach();
+  leftServoAttached = false;
 }
 
 // =====================================================
 // MOTOR CONTROL
-// Working direction map from your motor test
 // =====================================================
 void motorAForward() {
   digitalWrite(L_MOTOR_A_IN1, LOW);
@@ -417,6 +458,11 @@ void sendRightReset() {
   sendRightPacket(CMD_RESET_HAND, 0, COVER_UNCHANGED);
 }
 
+void sendRightScissorsReset() {
+  Serial.println("RIGHT CMD -> scissors reset");
+  sendRightPacket(CMD_RESET_SCISSORS, 0, COVER_UNCHANGED);
+}
+
 // =====================================================
 // ROUND CONTROL
 // =====================================================
@@ -424,7 +470,6 @@ void runNewRound() {
   Serial.println();
   Serial.println("=== NEW ROUND ===");
 
-  // keep both hands visible at stage 1
   setLeftCover(false);
   sendRightCover(false);
 
@@ -434,7 +479,6 @@ void runNewRound() {
   Serial.print(myLeftGesture);
   Serial.println(myRightGesture);
 
-  // execute both stage-1 gestures
   setLeftGesture(myLeftGesture);
   sendRightGesture(myRightGesture);
 
@@ -456,33 +500,29 @@ void resolveStage2(char oppLeft, char oppRight) {
   bool keepLeft  = (myLeftGesture  == keepGesture);
   bool keepRight = (myRightGesture == keepGesture);
 
+  // Only move the servo that needs to cover the hand being discarded
   if (keepLeft && !keepRight) {
-    setLeftCover(false);
-    sendRightCover(true);
-    Serial.println("Keeping LEFT, covering RIGHT.");
+    Serial.println("Keeping LEFT, covering RIGHT only.");
+    setLeftCover(false);    // make sure left stays open
+    sendRightCover(true);   // cover right only
   }
   else if (!keepLeft && keepRight) {
-    setLeftCover(true);
-    sendRightCover(false);
-    Serial.println("Keeping RIGHT, covering LEFT.");
+    Serial.println("Keeping RIGHT, covering LEFT only.");
+    setLeftCover(true);     // cover left only
+    sendRightCover(false);  // make sure right stays open
   }
   else {
-    // fallback
+    Serial.println("Ambiguous case -> default KEEP LEFT.");
     setLeftCover(false);
     sendRightCover(true);
-    Serial.println("Ambiguous case -> default KEEP LEFT.");
   }
 
   delay(RESULT_VIEW_MS);
 
-  // reveal both again
-  setLeftCover(false);
-  sendRightCover(false);
-
-  // no automatic hand reset anymore
+  // No automatic reset here
   roundActive = false;
   Serial.println("=== ROUND COMPLETE ===");
-  Serial.println("Use m, s, or v for manual resets.");
+  Serial.println("Use m, s, c, or v for manual resets.");
   Serial.println();
 }
 
@@ -491,13 +531,11 @@ void resolveStage2(char oppLeft, char oppRight) {
 // =====================================================
 int rpsResult(char a, char b) {
   if (a == b) return 0;
-
   if ((a == ROCK     && b == SCISSORS) ||
       (a == PAPER    && b == ROCK)     ||
       (a == SCISSORS && b == PAPER)) {
     return 1;
   }
-
   return -1;
 }
 
@@ -510,6 +548,7 @@ bool samePairIgnoringOrder(char a1, char a2, char b1, char b2) {
 }
 
 char dominantHandOfPair(char a, char b) {
+  if (a == b) return a;
   if (rpsResult(a, b) == 1) return a;
   return b;
 }
@@ -526,54 +565,41 @@ char getOtherHand(char pairA, char pairB, char oneOfThem) {
 
 void chooseStage1Pair(char &leftG, char &rightG) {
   int choice;
-
   do {
     choice = random(0, 3);
   } while (choice == lastChoice);
 
   lastChoice = choice;
 
-  switch (choice) {
-    case 0:
-      leftG = PAPER;
-      rightG = ROCK;
-      break;
-    case 1:
-      leftG = PAPER;
-      rightG = SCISSORS;
-      break;
-    case 2:
-      leftG = ROCK;
-      rightG = SCISSORS;
-      break;
+  if (choice == 0) {
+    leftG = ROCK;
+    rightG = SCISSORS;
+  }
+  else if (choice == 1) {
+    leftG = PAPER;
+    rightG = ROCK;
+  }
+  else {
+    leftG = PAPER;
+    rightG = SCISSORS;
   }
 }
 
 char chooseFinalHand(char myA, char myB, char oppA, char oppB) {
-  // Case 1: opponent used identical hands
   if (isIdenticalPair(oppA, oppB)) {
-    int scoreA = rpsResult(myA, oppA);
-    int scoreB = rpsResult(myB, oppA);
-
-    if (scoreA > scoreB) return myA;
-    if (scoreB > scoreA) return myB;
-
+    if (rpsResult(myA, oppA) == 1) return myA;
+    if (rpsResult(myB, oppA) == 1) return myB;
     return myA;
   }
 
-  // Case 2: same pair as us
   if (samePairIgnoringOrder(myA, myB, oppA, oppB)) {
     return dominantHandOfPair(myA, myB);
   }
 
-  // Case 3: different non-identical viable pair
   char shared = getSharedHand(myA, myB, oppA, oppB);
-  char other  = getOtherHand(myA, myB, shared);
+  char myOther = getOtherHand(myA, myB, shared);
+  char oppOther = getOtherHand(oppA, oppB, shared);
 
-  int roll = random(0, 3);
-  if (roll < 2) {
-    return shared; // 2/3
-  } else {
-    return other;  // 1/3
-  }
+  if (rpsResult(myOther, oppOther) >= 0) return myOther;
+  return shared;
 }

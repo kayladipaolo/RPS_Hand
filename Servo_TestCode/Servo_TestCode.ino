@@ -21,8 +21,4 @@ void loop() {
   Serial.println("Moving to 90 degrees");
   testServo.write(90);
   delay(2000);
-
-  Serial.println("Moving to 180 degrees");
-  testServo.write(180);
-  delay(2000);
 }

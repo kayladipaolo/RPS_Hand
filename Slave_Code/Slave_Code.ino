@@ -31,15 +31,18 @@ Servo rightCoverServo;
 // =====================================================
 // TUNING
 // =====================================================
-const int RIGHT_COVER_OPEN_ANGLE   = 90;
-const int RIGHT_COVER_CLOSED_ANGLE = 0;
+const int RIGHT_COVER_OPEN_ANGLE   = 0;
+const int RIGHT_COVER_CLOSED_ANGLE = 90;
 
-const unsigned long PULL_TIME_ROCK_MS     = 5000;
+// separate rock timings for right hand
+const unsigned long PULL_TIME_ROCK_A_MS   = 5000;
+const unsigned long PULL_TIME_ROCK_B_MS   = 5000;
+
 const unsigned long PULL_TIME_SCISSORS_MS = 5000;
 
 // separate reset timings for right hand
-const unsigned long RESET_TIME_A_MS       = 5000;  // index + middle
-const unsigned long RESET_TIME_B_MS       = 2000;  // thumb + ring + pinky
+const unsigned long RESET_TIME_A_MS       = 1500;
+const unsigned long RESET_TIME_B_MS       = 1500;
 
 const unsigned long COVER_WAIT_MS         = 500;
 
@@ -54,10 +57,11 @@ const char SCISSORS = 'S';
 // COMMAND PROTOCOL
 // =====================================================
 enum CommandType : uint8_t {
-  CMD_NONE = 0,
-  CMD_SET_GESTURE = 1,
-  CMD_SET_COVER   = 2,
-  CMD_RESET_HAND  = 3
+  CMD_NONE            = 0,
+  CMD_SET_GESTURE     = 1,
+  CMD_SET_COVER       = 2,
+  CMD_RESET_HAND      = 3,
+  CMD_RESET_SCISSORS  = 4
 };
 
 enum CoverState : uint8_t {
@@ -74,12 +78,24 @@ struct RightHandPacket {
 };
 
 // =====================================================
+// PENDING ACTION FLAGS
+// =====================================================
+volatile bool pendingGesture = false;
+volatile bool pendingCover = false;
+volatile bool pendingResetHand = false;
+volatile bool pendingResetScissors = false;
+
+char queuedGesture = PAPER;
+bool queuedCovered = false;
+
+// =====================================================
 // FUNCTION DECLARATIONS
 // =====================================================
 void onDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len);
 
 void setRightGesture(char gesture);
 void resetRightHandToPaper();
+void resetRightScissorsToPaper();
 void setRightCover(bool covered);
 
 void motorAForward();
@@ -104,6 +120,9 @@ void setup() {
   stopRightHand();
 
   rightCoverServo.attach(RIGHT_COVER_SERVO_PIN);
+  delay(300);
+  rightCoverServo.write(90);   // force open at startup
+  delay(1000);
 
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -120,7 +139,6 @@ void setup() {
 
   esp_now_register_recv_cb(onDataRecv);
 
-  // safe startup
   setRightCover(false);
 
   Serial.println("=== SLAVE READY ===");
@@ -130,7 +148,25 @@ void setup() {
 // LOOP
 // =====================================================
 void loop() {
-  // nothing needed here; slave waits for packets
+  if (pendingCover) {
+    pendingCover = false;
+    setRightCover(queuedCovered);
+  }
+
+  if (pendingGesture) {
+    pendingGesture = false;
+    setRightGesture(queuedGesture);
+  }
+
+  if (pendingResetHand) {
+    pendingResetHand = false;
+    resetRightHandToPaper();
+  }
+
+  if (pendingResetScissors) {
+    pendingResetScissors = false;
+    resetRightScissorsToPaper();
+  }
 }
 
 // =====================================================
@@ -155,18 +191,24 @@ void onDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   Serial.println(pkt.cover);
 
   if (pkt.command == CMD_SET_GESTURE) {
-    setRightGesture((char)pkt.gesture);
+    queuedGesture = (char)pkt.gesture;
+    pendingGesture = true;
   }
   else if (pkt.command == CMD_SET_COVER) {
     if (pkt.cover == COVER_OPEN) {
-      setRightCover(false);
+      queuedCovered = false;
+      pendingCover = true;
     }
     else if (pkt.cover == COVER_CLOSED) {
-      setRightCover(true);
+      queuedCovered = true;
+      pendingCover = true;
     }
   }
   else if (pkt.command == CMD_RESET_HAND) {
-    resetRightHandToPaper();
+    pendingResetHand = true;
+  }
+  else if (pkt.command == CMD_RESET_SCISSORS) {
+    pendingResetScissors = true;
   }
 }
 
@@ -186,13 +228,31 @@ void setRightGesture(char gesture) {
   }
   else if (gesture == ROCK) {
     Serial.println("RIGHT ROCK: motorAForward + motorBForward");
+
     motorAForward();
     motorBForward();
-    delay(PULL_TIME_ROCK_MS);
+
+    unsigned long startTime = millis();
+    bool motorAStopped = false;
+    bool motorBStopped = false;
+
+    while (!motorAStopped || !motorBStopped) {
+      unsigned long elapsed = millis() - startTime;
+
+      if (!motorAStopped && elapsed >= PULL_TIME_ROCK_A_MS) {
+        stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
+        motorAStopped = true;
+      }
+
+      if (!motorBStopped && elapsed >= PULL_TIME_ROCK_B_MS) {
+        stopMotor(R_MOTOR_B_IN1, R_MOTOR_B_IN2);
+        motorBStopped = true;
+      }
+    }
+
     stopRightHand();
   }
   else if (gesture == SCISSORS) {
-    // Scissors = curl thumb + ring + pinky only
     Serial.println("RIGHT SCISSORS: motorBForward only");
     stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
     motorBForward();
@@ -228,6 +288,17 @@ void resetRightHandToPaper() {
   stopRightHand();
 }
 
+void resetRightScissorsToPaper() {
+  Serial.println("RIGHT SCISSORS -> reset to PAPER");
+
+  stopMotor(R_MOTOR_A_IN1, R_MOTOR_A_IN2);
+
+  motorBReverse();
+  delay(RESET_TIME_B_MS);
+
+  stopRightHand();
+}
+
 void setRightCover(bool covered) {
   if (covered) {
     Serial.println("RIGHT COVER -> CLOSE");
@@ -241,7 +312,6 @@ void setRightCover(bool covered) {
 
 // =====================================================
 // MOTOR CONTROL
-// Working direction map from your motor test
 // =====================================================
 void motorAForward() {
   digitalWrite(R_MOTOR_A_IN1, LOW);
